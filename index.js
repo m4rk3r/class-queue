@@ -12,23 +12,25 @@ db.defaults({ queue: [] })
 app.set('view engine', 'ejs');
 app.use(express.urlencoded({ extended: true }))
 
+const getPeople = () => db.get('queue').sortBy('complete').value()
+
 app.get('/admin', function (req, res) {
-  const people = db.get('queue').sortBy('complete').value();
-  res.render('admin', { people })
+  res.render('admin', {
+    people: getPeople()
+  });
 })
 
 app.get('/', function (req, res) {
-  const people = db.get('queue').sortBy('complete').value();
   res.render('signup', {
     success: false,
     error: '',
-    people
+    people: getPeople()
   })
 })
 
 app.get('/api/queue', (req, res) => {
   res.json({
-    people: people = db.get('queue').sortBy('complete').value()
+    people: getPeople()
   });
 });
 
@@ -44,7 +46,7 @@ app.post('/', function (req, res) {
   res.render('signup', {
     success: true,
     error: '',
-    people: db.get('queue').sortBy('complete').value()
+    people: getPeople()
   });
 });
 
