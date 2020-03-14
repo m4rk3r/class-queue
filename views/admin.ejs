@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title></title>
+    <style media="screen">
+      li.complete {
+        text-decoration: line-through;
+      }
+    </style>
+  </head>
+  <body>
+    <ol>
+    <% people.forEach(person => { %>
+      <% if (person.complete) { %>
+        <li class="complete"><%= person.name %></li>
+      <% } else { %>
+        <li><%= person.name %> <button data-name="<%= person.name %>">Mark Complete</button></li>
+      <% } %>
+    <% }) %>
+    </ol>
+  </body>
+  <script type="text/javascript">
+    function markComplete(evt) {
+      if (evt.target.tagName === 'BUTTON') {
+        let data = new URLSearchParams();
+        data.append('name', evt.target.dataset.name);
+        fetch('/complete', {
+          method: 'post',
+          body: data
+        });
+      }
+    }
+    document.querySelector('ol').addEventListener('click', markComplete);
+  </script>
+</html>
