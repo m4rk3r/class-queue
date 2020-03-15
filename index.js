@@ -1,6 +1,7 @@
 const express = require('express');
 const FileSync = require('lowdb/adapters/FileSync');
 const lowdb = require('lowdb');
+const uuid = require('uuid');
 
 const adapter = new FileSync('queue.db');
 const app = express();
@@ -40,7 +41,7 @@ app.post('/', function (req, res) {
   }
 
   db.get('queue')
-    .push({ name: req.body.name, complete: false, joined: new Date() })
+    .push({ name: req.body.name, complete: false, joined: new Date(), id: uuid.v1() })
     .write();
 
   res.render('signup', {
@@ -51,18 +52,21 @@ app.post('/', function (req, res) {
 });
 
 app.post('/complete', function (req, res) {
-  const exists = db.get('queue').find({ name: req.body.name }).value();
+  const { id } = req.body;
+  const exists = db.get('queue').find({ id }).value();
 
   if (!exists) {
     return res.status(400).end();
   }
 
   db.get('queue')
-    .find({ name: req.body.name })
+    .find({ id })
     .assign({ complete: true })
     .write();
 
-  return res.status(200).end();
+  return res.json({
+    people: getPeople()
+  });
 })
 
 app.listen(3500);

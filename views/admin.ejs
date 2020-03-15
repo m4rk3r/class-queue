@@ -15,22 +15,43 @@
       <% if (person.complete) { %>
         <li class="complete"><%= person.name %></li>
       <% } else { %>
-        <li><%= person.name %> <button data-name="<%= person.name %>">Mark Complete</button></li>
+        <li><%= person.name %> <button data-id="<%= person.id %>">Mark Complete</button></li>
       <% } %>
     <% }) %>
     </ol>
   </body>
   <script type="text/javascript">
+    const list = document.querySelector('ol');
+
+    function updateList(people) {
+      list.innerHTML = '';
+      people.forEach(function (person) {
+        const btn = `<button data-id="${person.id}">Mark Complete</button>`;
+        list.innerHTML += `<li ${person.complete ? 'class="complete"' : ''}>${ person.name } ${!person.complete ? btn : '' }</li>`;
+      });
+    }
+
     function markComplete(evt) {
       if (evt.target.tagName === 'BUTTON') {
         let data = new URLSearchParams();
-        data.append('name', evt.target.dataset.name);
+        data.append('id', evt.target.dataset.id);
         fetch('/complete', {
           method: 'post',
           body: data
+        }).then(res => {
+          res.json().then(data => {
+            updateList(data.people);
+          });
         });
       }
     }
-    document.querySelector('ol').addEventListener('click', markComplete);
+
+    setInterval(function () {
+      fetch('/api/queue').then(res =>
+        res.json().then(data => updateList(data.people))
+      );
+    }, 1000);
+
+    list.addEventListener('click', markComplete);
   </script>
 </html>
