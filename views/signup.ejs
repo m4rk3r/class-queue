@@ -27,6 +27,9 @@
       text-decoration: line-through;
       opacity: .75;
     }
+    li.current {
+      list-style-type: '🐸 ';
+    }
     input,button {
       padding: 5px;
       border-radius: 5px;
@@ -44,6 +47,8 @@
   <% people.forEach(person => { %>
     <% if (person.complete) { %>
       <li class="complete"><%= person.name %></li>
+    <% } else if (person.current) { %>
+      <li class="current"><%= person.name %></li>
     <% } else { %>
       <li><%= person.name %></li>
     <% } %>
@@ -57,7 +62,9 @@
       res.json().then(function (data) {
         list.innerHTML = '';
         data.people.forEach(function (person) {
-          list.innerHTML += `<li ${person.complete ? 'class="complete"' : ''}>${ person.name }</li>`;
+          let classes = person.complete ? 'complete' : '';
+          classes = person.current ? `current ${classes}` : classes;
+          list.innerHTML += `<li class="${classes}">${ person.name }</li>`;
         });
       })
     });

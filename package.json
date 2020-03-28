@@ -13,6 +13,10 @@
     "express": "^4.17.1",
     "lowdb": "^1.0.0",
     "nodemon": "^2.0.2",
+    "redis": "^3.0.2",
+    "redis-json": "^3.2.0",
+    "redis-rejson": "^1.0.0",
+    "socketio": "^1.0.0",
     "uuid": "^7.0.2"
   }
 }
