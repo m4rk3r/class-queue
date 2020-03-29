@@ -17,11 +17,21 @@
     <ol>
     <% people.forEach(person => { %>
       <% if (person.complete) { %>
-        <li class="complete"><%= person.name %></li>
+        <li class="complete"><%= person.name %> <button data-action="remove" data-id="<%= person.id %>" type="button">Remove</button></li>
       <% } else if (person.current) { %>
-        <li class="current"><%= person.name %> <button data-action="current" data-id="<%= person.id %>" type="button">Mark Current</button> / <button data-action="complete" data-id="<%= person.id %>" type="button">Mark Complete</button></li>
+        <li class="current">
+          <%= person.name %>
+          <button data-action="current" data-id="<%= person.id %>" type="button">Mark Current</button> /
+          <button data-action="complete" data-id="<%= person.id %>" type="button">Mark Complete</button> /
+          <button data-action="remove" data-id="<%= person.id %>" type="button">Remove</button>
+        </li>
       <% } else { %>
-        <li><%= person.name %> <button data-action="current" data-id="<%= person.id %>" type="button">Mark Current</button> / <button data-action="complete" data-id="<%= person.id %>" type="button">Mark Complete</button></li>
+        <li>
+          <%= person.name %>
+          <button data-action="current" data-id="<%= person.id %>" type="button">Mark Current</button> /
+          <button data-action="complete" data-id="<%= person.id %>" type="button">Mark Complete</button> /
+          <button data-action="remove" data-id="<%= person.id %>" type="button">Remove</button>
+        </li>
       <% } %>
     <% }) %>
     </ol>
@@ -32,10 +42,14 @@
     function updateList(people) {
       list.innerHTML = '';
       people.forEach(function (person) {
-        const btn = `<button data-id="${person.id}" type="button" data-action="current">Mark Current</button> / <button data-action="complete" data-id="${person.id}" type="button">Mark Complete</button>`;
+        const removeBtn = `<button data-action="remove" data-id="${person.id}" type="button">Remove</button>`;
+        const btn = `
+          <button data-id="${person.id}" type="button" data-action="current">Mark Current</button> /
+          <button data-action="complete" data-id="${person.id}" type="button">Mark Complete</button> /
+          ${removeBtn}`;
         let classes = person.complete ? 'complete' : '';
         classes = person.current ? `current ${classes}` : classes;
-        list.innerHTML += `<li class="${classes}">${ person.name } ${!person.complete ? btn : '' }</li>`;
+        list.innerHTML += `<li class="${classes}">${ person.name } ${!person.complete ? btn : removeBtn }</li>`;
       });
     }
 

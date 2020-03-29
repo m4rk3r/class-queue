@@ -105,6 +105,24 @@ app.post('/complete', function (req, res) {
 });
 
 
+app.post('/remove', function (req, res) {
+  const { id } = req.body;
+  const exists = db.get('queue').find({ id }).value();
+
+  if (!exists) {
+    return res.status(400).end();
+  }
+
+  db.get('queue')
+    .remove({ id })
+    .write();
+
+  return res.json({
+    people: getPeople()
+  });
+});
+
+
 const getCreatures = async (ignore = '') => {
     const keys = await _keys('u:*');
     const cursor = client.batch();
