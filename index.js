@@ -1,14 +1,11 @@
 const express = require('express');
 const FileSync = require('lowdb/adapters/FileSync');
-const lowdb = require('lowdb');
 const uuid = require('uuid');
 const redis = require('redis');
 const rejson = require('redis-rejson');
 const { promisify } = require('util');
 
-const adapter = new FileSync('queue.db');
 const app = express();
-const db = lowdb(adapter);
 const server = require('http').Server(app);
 const io = require('socket.io')(server);
 rejson(redis);
@@ -16,109 +13,134 @@ const client = redis.createClient();
 
 redis.Multi.prototype.exec = promisify(redis.Multi.prototype.exec);
 const _keys = promisify(client.keys).bind(client);
-
-db.defaults({ queue: [] })
-  .write();
+const _hget = promisify(client.hget).bind(client);
+const _hset = promisify(client.hset).bind(client);
+const _lrange = promisify(client.lrange).bind(client);
+const _rpush = promisify(client.rpush).bind(client);
+const _lindex = promisify(client.lindex).bind(client);
 
 app.set('view engine', 'ejs');
 app.use(express.urlencoded({ extended: true }))
 
-const getPeople = () => db.get('queue').sortBy('complete').value()
+const getPeople = async () => {
+  const batch = client.batch();
+  const queue = await _lrange('queue', 0, -1);
+  queue.forEach(k => batch.json_get(`q:${k}`));
+  return (await batch.exec()).map(JSON.parse);
+}
 
-app.get('/admin', function (req, res) {
+const exists = async (id) => {
+  const queue = await _lrange('queue', 0, -1);
+  return queue.includes(id);
+}
+
+app.get('/admin', async (req, res) => {
   res.render('admin', {
-    people: getPeople()
+    people: await getPeople()
   });
 })
 
-app.get('/', function (req, res) {
+app.get('/', async (req, res) => {
   res.render('signup', {
     success: false,
     error: '',
-    people: getPeople()
+    people: await getPeople()
   })
 })
 
-app.get('/api/queue', (req, res) => {
+app.get('/api/queue', async (req, res) => {
   res.json({
-    people: getPeople()
+    people: await getPeople()
   });
 });
 
-app.post('/', function (req, res) {
+app.post('/', async (req, res) => {
   if (!req.body.name) {
     return;
   }
 
-  db.get('queue')
-    .push({ name: req.body.name, complete: false, current: false, joined: new Date(), id: uuid.v1() })
-    .write();
+  const uid = uuid.v1();
+  const data = {
+    name: req.body.name,
+    complete: false,
+    current: false,
+    joined: new Date(),
+    id: uid
+  };
+  _rpush('queue', uid);
+  client.json_set(`q:${uid}`, '.', JSON.stringify(data));
 
   res.render('signup', {
     success: true,
     error: '',
-    people: getPeople()
+    people: await getPeople()
   });
 });
 
 
-app.post('/current', function (req, res) {
+app.post('/current', async (req, res) => {
   const { id } = req.body;
-  const exists = db.get('queue').find({ id }).value();
-
-  if (!exists) {
+  if (!exists(id)) {
     return res.status(400).end();
   }
 
-  db.get('queue')
-    .find({ current: true })
-    .assign({ current: false })
-    .write();
+  const people = await getPeople();
+  const isCurrent = people.find(person => person.current);
+  if (isCurrent) {
+    isCurrent.current = false;
+    client.json_set(`q:${isCurrent.id}`, '.', JSON.stringify(isCurrent));
 
-  db.get('queue')
-    .find({ id })
-    .assign({ current: true })
-    .write();
+    // toggling current person
+    if (isCurrent.id === id) {
+      return res.json({
+        people: await getPeople()
+      });
+    }
+  }
+
+  const nextCurrent = people.find(person => person.id === id);
+  if (nextCurrent) {
+    nextCurrent.current = true;
+    client.json_set(`q:${nextCurrent.id}`, '.', JSON.stringify(nextCurrent));
+  }
 
   return res.json({
-    people: getPeople()
+    people: await getPeople()
   });
 });
 
 
-app.post('/complete', function (req, res) {
+app.post('/complete', async (req, res) => {
   const { id } = req.body;
-  const exists = db.get('queue').find({ id }).value();
-
-  if (!exists) {
+  if (!exists(id)) {
     return res.status(400).end();
   }
 
-  db.get('queue')
-    .find({ id })
-    .assign({ complete: true, current: false })
-    .write();
+  const people = await getPeople();
+  const person = people.find(person => person.id === id);
+  if (person) {
+    person.complete = true;
+    person.current = false;
+    client.json_set(`q:${person.id}`, '.', JSON.stringify(person));
+  }
 
   return res.json({
-    people: getPeople()
+    people: await getPeople()
   });
 });
 
 
-app.post('/remove', function (req, res) {
+app.post('/remove', async (req, res) => {
   const { id } = req.body;
-  const exists = db.get('queue').find({ id }).value();
-
-  if (!exists) {
+  if (!exists(id)) {
     return res.status(400).end();
   }
 
-  db.get('queue')
-    .remove({ id })
-    .write();
+  client.del(`q:${id}`);
+  client.lrem('queue', 1, id);
 
   return res.json({
-    people: getPeople()
+    people: await getPeople()
   });
 });
 
