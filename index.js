@@ -8,6 +8,9 @@ const { promisify } = require('util');
 const app = express();
 const server = require('http').Server(app);
 const io = require('socket.io')(server);
+const redisAdapter = require('socket.io-redis');
+io.adapter(redisAdapter({ host: 'localhost', port: 6379 }));
+
 rejson(redis);
 const client = redis.createClient();
 const lifespan = 2 * 60;
