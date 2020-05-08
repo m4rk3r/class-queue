@@ -10,6 +10,7 @@ const server = require('http').Server(app);
 const io = require('socket.io')(server);
 rejson(redis);
 const client = redis.createClient();
+const lifespan = 2 * 60;
 
 redis.Multi.prototype.exec = promisify(redis.Multi.prototype.exec);
 const _keys = promisify(client.keys).bind(client);
@@ -153,8 +154,31 @@ const getCreatures = async (ignore = '') => {
     return res;
 }
 
-io.on('connection', socket => {
+const getActivities = async () => {
+  const keys = await _keys('a:*');
+  const cursor = client.batch();
+  keys.forEach(k => cursor.json_get(k));
+  const res = (await cursor.exec()).map((r) => {
+    return { ts: Date.now(), ...JSON.parse(r)};
+  });
+  return res;
+}
+
+io.on('connection', async socket => {
   console.log('socket connected...');
+
+  socket.on('clickEvt', async data => {
+    console.log('received clickEvt');
+    const k = `a:${data.id}:${data.evtIdx}`;
+    data = { created: Date.now(), lifespan, ...data};
+    client.json_set(k, '.', JSON.stringify(data));
+    client.expire(k, lifespan);
+    io.emit('activity', data);
+  });
+
+  // broadcast curent events
+  const activity = await getActivities();
+  socket.emit('activity', activity);
 
   socket.on('frame', async data => {
     const k = `u:${data.id}`;
