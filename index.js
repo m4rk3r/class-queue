@@ -168,12 +168,11 @@ io.on('connection', async socket => {
   console.log('socket connected...');
 
   socket.on('clickEvt', async data => {
-    console.log('received clickEvt');
     const k = `a:${data.id}:${data.evtIdx}`;
     data = { created: Date.now(), lifespan, ...data};
     client.json_set(k, '.', JSON.stringify(data));
     client.expire(k, lifespan);
-    io.emit('activity', data);
+    socket.broadcast.emit('activity', data);
   });
 
   // broadcast curent events
