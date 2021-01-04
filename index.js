@@ -150,7 +150,7 @@ const getCreatures = async (ignore = '') => {
     const keys = await redis.keys('u:*');
     const pipe = redis.pipeline();
     keys.forEach(k => { if (k !== ignore) pipe.hgetall(k); });
-    return (await pipe.exec()).map(coord => coord[1]);
+    return (await pipe.exec()).map(([e, r]) => r);
 }
 
 const getActivities = async () => {
