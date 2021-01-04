@@ -1,9 +1,8 @@
 const express = require('express');
 const FileSync = require('lowdb/adapters/FileSync');
 const uuid = require('uuid');
-const redis = require('redis');
-const rejson = require('redis-rejson');
-const { promisify } = require('util');
+const Redis = require('ioredis');
+const redis = new Redis();
 
 const app = express();
 const server = require('http').Server(app);
@@ -11,30 +10,20 @@ const io = require('socket.io')(server);
 const redisAdapter = require('socket.io-redis');
 io.adapter(redisAdapter({ host: 'localhost', port: 6379 }));
 
-rejson(redis);
-const client = redis.createClient();
 const lifespan = 2 * 60;
-
-redis.Multi.prototype.exec = promisify(redis.Multi.prototype.exec);
-const _keys = promisify(client.keys).bind(client);
-const _hget = promisify(client.hget).bind(client);
-const _hset = promisify(client.hset).bind(client);
-const _lrange = promisify(client.lrange).bind(client);
-const _rpush = promisify(client.rpush).bind(client);
-const _lindex = promisify(client.lindex).bind(client);
 
 app.set('view engine', 'ejs');
 app.use(express.urlencoded({ extended: true }))
 
 const getPeople = async () => {
-  const batch = client.batch();
-  const queue = await _lrange('queue', 0, -1);
-  queue.forEach(k => batch.json_get(`q:${k}`));
+  const batch = redis.pipeline();
+  const queue = await redis.lrange('queue', 0, -1);
+  queue.forEach(k => batch.call('json.get', `q:${k}`));
   return (await batch.exec()).map(JSON.parse);
 }
 
 const exists = async (id) => {
-  const queue = await _lrange('queue', 0, -1);
+  const queue = await redis.lrange('queue', 0, -1);
   return queue.includes(id);
 }
 
@@ -71,8 +60,8 @@ app.post('/', async (req, res) => {
     joined: new Date(),
     id: uid
   };
-  _rpush('queue', uid);
-  client.json_set(`q:${uid}`, '.', JSON.stringify(data));
+  redis.rpush('queue', uid);
+  redis.call('json.set', `q:${uid}`, '.', JSON.stringify(data));
 
   res.render('signup', {
     success: true,
@@ -92,7 +81,7 @@ app.post('/current', async (req, res) => {
   const isCurrent = people.find(person => person.current);
   if (isCurrent) {
     isCurrent.current = false;
-    client.json_set(`q:${isCurrent.id}`, '.', JSON.stringify(isCurrent));
+    redis.call('json.set', `q:${isCurrent.id}`, '.', JSON.stringify(isCurrent));
 
     // toggling current person
     if (isCurrent.id === id) {
@@ -105,7 +94,7 @@ app.post('/current', async (req, res) => {
   const nextCurrent = people.find(person => person.id === id);
   if (nextCurrent) {
     nextCurrent.current = true;
-    client.json_set(`q:${nextCurrent.id}`, '.', JSON.stringify(nextCurrent));
+    redis.call('json.set', `q:${nextCurrent.id}`, '.', JSON.stringify(nextCurrent));
   }
 
   return res.json({
@@ -125,7 +114,7 @@ app.post('/complete', async (req, res) => {
   if (person) {
     person.complete = true;
     person.current = false;
-    client.json_set(`q:${person.id}`, '.', JSON.stringify(person));
+    redis.call('json.set', `q:${person.id}`, '.', JSON.stringify(person));
   }
 
   return res.json({
@@ -140,8 +129,8 @@ app.post('/remove', async (req, res) => {
     return res.status(400).end();
   }
 
-  client.del(`q:${id}`);
-  client.lrem('queue', 1, id);
+  redis.del(`q:${id}`);
+  redis.lrem('queue', 1, id);
 
   return res.json({
     people: await getPeople()
@@ -149,19 +138,26 @@ app.post('/remove', async (req, res) => {
 });
 
 
+// const getCreatures = async (ignore = '') => {
+//     const keys = await redis.keys('u:*');
+//     const cursor = redis.pipeline();
+//     keys.forEach(k => { if (k !== ignore) redis.call('json.get', k); });
+//     const res = (await cursor.exec()).map(r => JSON.parse(r));
+//     return res;
+// }
+
 const getCreatures = async (ignore = '') => {
-    const keys = await _keys('u:*');
-    const cursor = client.batch();
-    keys.forEach(k => { if (k !== ignore) cursor.json_get(k); });
-    const res = (await cursor.exec()).map(r => JSON.parse(r));
-    return res;
+    const keys = await redis.keys('u:*');
+    const pipe = redis.pipeline();
+    keys.forEach(k => { if (k !== ignore) pipe.hgetall(k); });
+    return (await pipe.exec()).map(coord => coord[1]);
 }
 
 const getActivities = async () => {
-  const keys = await _keys('a:*');
-  const cursor = client.batch();
-  keys.forEach(k => cursor.json_get(k));
-  const res = (await cursor.exec()).map((r) => {
+  const keys = await redis.keys('a:*');
+  const cursor = redis.pipeline();
+  keys.forEach(k => cursor.call('json.get', k));
+  const res = (await cursor.exec()).map((e, r) => {
     return { ts: Date.now(), ...JSON.parse(r)};
   });
   return res;
@@ -173,8 +169,9 @@ io.on('connection', async socket => {
   socket.on('clickEvt', async data => {
     const k = `a:${data.id}:${data.evtIdx}`;
     data = { created: Date.now(), lifespan, ...data};
-    client.json_set(k, '.', JSON.stringify(data));
-    client.expire(k, lifespan);
+    //redis.call('json.set', k, '.', JSON.stringify(data));
+    redis.hset(k, 'x', data.x, 'y', data.y, 'id', data.id, 'creature', data.creature, 'nickname', data.nickname, 'evtIdx', data.evtIdx);
+    redis.expire(k, lifespan);
     socket.broadcast.emit('activity', data);
   });
 
@@ -184,8 +181,10 @@ io.on('connection', async socket => {
 
   socket.on('frame', async data => {
     const k = `u:${data.id}`;
-    client.json_set(k, '.', JSON.stringify(data));
-    client.expire(k, 15);
+    const { x, y } = data.position;
+    //redis.call('json.set', k, '.', JSON.stringify(data));
+    redis.hset(k, 'x', x, 'y', y, 'id', data.id, 'creature', data.creature, 'nickname', data.nickname);
+    redis.expire(k, 15);
     const creatures = await getCreatures();
     socket.emit('pong', creatures);
   });

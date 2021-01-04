@@ -11,13 +11,11 @@
   "dependencies": {
     "ejs": "^3.0.1",
     "express": "^4.17.1",
+    "ioredis": "^4.19.4",
     "lowdb": "^1.0.0",
     "nodemon": "^2.0.2",
-    "redis": "^3.0.2",
-    "redis-json": "^3.2.0",
-    "redis-rejson": "^1.0.0",
-    "socket.io-redis": "^5.2.0",
     "socket.io": "^2.3.0",
+    "socket.io-redis": "^5.2.0",
     "uuid": "^7.0.2"
   }
 }
