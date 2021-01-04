@@ -19,7 +19,7 @@ const getPeople = async () => {
   const batch = redis.pipeline();
   const queue = await redis.lrange('queue', 0, -1);
   queue.forEach(k => batch.call('json.get', `q:${k}`));
-  return (await batch.exec()).map(JSON.parse);
+  return (await batch.exec()).map(r => JSON.parse(r[1]));
 }
 
 const exists = async (id) => {
@@ -156,9 +156,9 @@ const getCreatures = async (ignore = '') => {
 const getActivities = async () => {
   const keys = await redis.keys('a:*');
   const cursor = redis.pipeline();
-  keys.forEach(k => cursor.call('json.get', k));
-  const res = (await cursor.exec()).map((e, r) => {
-    return { ts: Date.now(), ...JSON.parse(r)};
+  keys.forEach(k => cursor.hgetall(k));
+  const res = (await cursor.exec()).map(([e, r]) => {
+    return { ts: Date.now(), ...r};
   });
   return res;
 }
@@ -169,8 +169,7 @@ io.on('connection', async socket => {
   socket.on('clickEvt', async data => {
     const k = `a:${data.id}:${data.evtIdx}`;
     data = { created: Date.now(), lifespan, ...data};
-    //redis.call('json.set', k, '.', JSON.stringify(data));
-    redis.hset(k, 'x', data.x, 'y', data.y, 'id', data.id, 'creature', data.creature, 'nickname', data.nickname, 'evtIdx', data.evtIdx);
+    redis.hset(k, 'x', data.x, 'y', data.y, 'id', data.id, 'creature', data.creature, 'nickname', data.nickname, 'evtIdx', data.evtIdx, 'created', Date.now(), 'lifespan', lifespan);
     redis.expire(k, lifespan);
     socket.broadcast.emit('activity', data);
   });
@@ -181,9 +180,7 @@ io.on('connection', async socket => {
 
   socket.on('frame', async data => {
     const k = `u:${data.id}`;
-    const { x, y } = data.position;
-    //redis.call('json.set', k, '.', JSON.stringify(data));
-    redis.hset(k, 'x', x, 'y', y, 'id', data.id, 'creature', data.creature, 'nickname', data.nickname);
+    redis.hset(k, 'x', data.x, 'y', data.y, 'id', data.id, 'creature', data.creature, 'nickname', data.nickname);
     redis.expire(k, 15);
     const creatures = await getCreatures();
     socket.emit('pong', creatures);
